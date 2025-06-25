@@ -1,0 +1,73 @@
+@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@500&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+body {
+  font-family: 'Quicksand', sans-serif;
+  background: #f3f4f6;
+  color: #18181b;
+  min-height: 100vh;
+  margin: 0;
+}
+
+.nav-link {
+  @apply text-white font-medium px-3 py-2 rounded hover:bg-yellow-400/20 hover:text-yellow-400 transition;
+}
+.active {
+  @apply text-yellow-400 bg-yellow-400/20;
+}
+
+.active {
+  background: #736626;
+  color: #fff;
+  font-weight: bold;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .animate-zoom {
+    animation: zoomFade 3s ease-in-out forwards;
+  }
+  @keyframes zoomFade {
+    0% {
+      transform: scale(1.05);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  .animate-fade-in-up {
+    animation: fadeInUp 0.8s ease-in-out both;
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+/* Ẩn thanh cuộn */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes popupfadein {
+  0% { opacity: 0; transform: scale(0.92);}
+  100% { opacity: 1; transform: scale(1);}
+}
