@@ -11,6 +11,10 @@ from functools import wraps
 import datetime
 from dotenv import load_dotenv
 from bson import ObjectId
+import smtplib
+from email.mime.text import MIMEText
+
+
 load_dotenv()
 
 app = Flask(__name__)
@@ -790,6 +794,69 @@ def delete_category(cat_id, current_user):
     if result.deleted_count:
         return jsonify({'success': True, 'message': 'Đã xoá thể loại!'})
     return jsonify({'success': False, 'message': 'Không tìm thấy thể loại!'}), 404
+
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 587
+SMTP_USER = os.environ.get("SMTP_USER")  # đặt trong biến môi trường
+SMTP_PASS = os.environ.get("SMTP_PASS")
+
+def generate_otp(length=6):
+    return ''.join(random.choices(string.digits, k=length))
+
+@app.route('/api/request-otp', methods=['POST'])
+def request_otp():
+    data = request.json
+    email = data.get('email')
+    if not email:
+        return jsonify({'error': 'Thiếu email'}), 400
+
+    user = mongo.db.users.find_one({'email': email})
+    if not user:
+        return jsonify({'error': 'Email không tồn tại'}), 400
+
+    otp_code = generate_otp()
+    expired_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
+
+    # Lưu vào collection otp, nếu đã có thì cập nhật
+    mongo.db.password_otps.update_one(
+        {'email': email},
+        {'$set': {'otp': otp_code, 'expired_at': expired_at}},
+        upsert=True
+    )
+
+    # Gửi mail OTP (bạn dùng code gửi mail như trên, sửa body)
+    subject = "Mã xác thực đổi mật khẩu"
+    body = f"Mã xác thực (OTP) của bạn là: {otp_code}\nHiệu lực trong 5 phút."
+    send_reset_email(email, subject, body)  # Tái sử dụng hàm send_reset_email
+
+    return jsonify({'message': 'Đã gửi mã xác thực về email'}), 200
+
+@app.route('/api/verify-otp-reset', methods=['POST'])
+def verify_otp_reset():
+    data = request.json
+    email = data.get('email')
+    otp = data.get('otp')
+    new_password = data.get('new_password')
+    if not all([email, otp, new_password]):
+        return jsonify({'error': 'Thiếu thông tin'}), 400
+
+    otp_record = mongo.db.password_otps.find_one({'email': email})
+    if (not otp_record
+        or otp_record['otp'] != otp
+        or otp_record['expired_at'] < datetime.datetime.utcnow()):
+        return jsonify({'error': 'Mã OTP không hợp lệ hoặc đã hết hạn'}), 400
+
+    user = mongo.db.users.find_one({'email': email})
+    if not user:
+        return jsonify({'error': 'Email không tồn tại'}), 400
+
+    hashed_pw = generate_password_hash(new_password)
+    mongo.db.users.update_one({'email': email}, {'$set': {'password': hashed_pw}})
+
+    # Xoá mã OTP sau khi dùng
+    mongo.db.password_otps.delete_one({'email': email})
+
+    return jsonify({'message': 'Đổi mật khẩu thành công'}), 200
 
 # ---------- RUN APP ----------
 if __name__ == '__main__':

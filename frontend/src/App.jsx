@@ -18,7 +18,7 @@ import SinglePage from "./pages/Single";
 import CountryPage from "./pages/Country";
 import WatchLater from "./components/WatchLater";
 import SearchPage from "./pages/SearchPage"; 
-
+import ForgotPasswordModal from "./pages/ForgotPasswordModal"; 
 
 import AdminLayout from "./layouts/AdminLayout";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -30,7 +30,7 @@ function App() {
   const [showLogin, setShowLogin] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const location = useLocation();
-
+  const [showForgot, setShowForgot] = useState(false);
   // Nếu đang ở route admin thì KHÔNG render Navbar
   const isAdminRoute = location.pathname.startsWith("/admin");
   return (
@@ -66,6 +66,10 @@ function App() {
           setShowLogin(false);
           setShowRegister(true);
         }}
+        onShowForgot={() => {
+          setShowLogin(false);
+          setShowForgot(true); // <- Chỗ này rất quan trọng!
+        }}
       />
       <RegisterModal
         show={showRegister}
@@ -75,6 +79,12 @@ function App() {
           setShowLogin(true);
         }}
       />
+
+      <ForgotPasswordModal
+        show={showForgot}
+        onClose={() => setShowForgot(false)}
+      />
+
       <Toaster position="top-right" reverseOrder={false} />
     </AuthProvider>
   );

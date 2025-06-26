@@ -5,7 +5,7 @@ import posterlogin from "../assets/posterlogin.png";
 import logologin from "../assets/logologin.png";
 import toast from "react-hot-toast";
 
-export default function LoginModal({ show, onClose, onShowRegister }) {
+export default function LoginModal({ show, onClose, onShowRegister,onShowForgot }) {
   const { login } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -144,12 +144,14 @@ export default function LoginModal({ show, onClose, onShowRegister }) {
           </button>
 
           <div className="mt-4 text-right text-sm">
-            <Link
-              to="/forgot-password"
-              className="text-white/60 hover:text-yellow-400"
-            >
-              Quên mật khẩu?
-            </Link>
+            <button
+            type="button"
+            onClick={onShowForgot}
+            className="text-white/60 hover:text-yellow-400 underline"
+          >
+            Quên mật khẩu?
+          </button>
+
           </div>
         </form>
       </div>
