@@ -4,17 +4,17 @@ from flask_pymongo import PyMongo
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import jwt
-import datetime
 import requests
 import os
 import json
 from functools import wraps
+import datetime
 from dotenv import load_dotenv
-
+from bson import ObjectId
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}})
+CORS(app)
 
 
 # MongoDB Config
@@ -57,15 +57,17 @@ def token_required(f):
             return jsonify({"error": "Token đã hết hạn!"}), 401
         except Exception as e:
             return jsonify({"error": "Invalid token!"}), 401
-        return f(current_user, *args, **kwargs)
+        kwargs['current_user'] = current_user
+        return f(*args, **kwargs)
     return decorated
 
 def admin_required(f):
     @wraps(f)
-    def decorated(current_user, *args, **kwargs):
-        if current_user.get('role') != 'admin':
+    def decorated(*args, **kwargs):
+        current_user = kwargs.get('current_user')
+        if not current_user or current_user.get('role') != 'admin':
             return jsonify({'error': 'Bạn không phải admin!'}), 403
-        return f(current_user, *args, **kwargs)
+        return f(*args, **kwargs)
     return decorated
 
 # ----------- Auth Routes -----------
@@ -157,13 +159,13 @@ def update_profile(current_user):
 # ----------- Movie Utilities -----------
 def load_movies():
     if not os.path.exists(DATA_FILE):
-        with open(DATA_FILE, 'w') as f:
-            json.dump([], f)
-    with open(DATA_FILE) as f:
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump([], f, ensure_ascii=False)
+    with open(DATA_FILE, encoding='utf-8') as f:
         return json.load(f)
 
 def save_movies(movies):
-    with open(DATA_FILE, 'w') as f:
+    with open(DATA_FILE, 'w', encoding='utf-8') as f:
         json.dump(movies, f, ensure_ascii=False, indent=2)
 
 # ----------- Movie CRUD (admin only) -----------
@@ -174,6 +176,7 @@ def add_movie(current_user):
     data = request.form
     title = data.get("title")
     description = data.get("description")
+    movie_type = data.get("type", "single")
     year = data.get("year")
     country = data.get("country")
     genre = data.get("genre")
@@ -249,6 +252,7 @@ def add_movie(current_user):
         "trailer": trailer_file_path or trailer_link,
         "video": video_path,
         "gallery": gallery_paths,
+        "type": movie_type,
         "created_by": current_user['username'],
         "created_at": datetime.datetime.utcnow().isoformat()
     }
@@ -265,7 +269,7 @@ def edit_movie(movie_id, current_user):
     for m in movies:
         if m['id'] == movie_id:
             # Chỉ cho phép sửa bởi admin
-            for k in ["title", "description", "year", "country", "genre", "actors"]:
+            for k in ["title", "description", "year", "country", "genre", "actors", "type"]:
                 if k in data:
                     m[k] = data[k]
 
@@ -630,6 +634,162 @@ def tmdb_movie_keywords(movie_id):
 def tmdb_movie_recommendations(movie_id):
     data, status = tmdb_request(f"/movie/{movie_id}/recommendations", {"language": "vi-VN"})
     return jsonify(data), status
+
+#----------------------REVIEW PHIM-----------------#
+@app.route('/api/reviews/<movie_id>', methods=['GET'])
+def get_reviews(movie_id):
+    reviews_cursor = mongo.db.reviews.find({"movie_id": movie_id}).sort("created_at", -1)
+    reviews = []
+    for r in reviews_cursor:
+        reviews.append({
+            "id": str(r.get("_id")),
+            "user_id": r.get("user_id"),
+            "username": r.get("username", "Ẩn danh"),
+            "rating": r.get("rating"),
+            "comment": r.get("comment"),
+            "created_at": r.get("created_at").isoformat() if r.get("created_at") else None,
+        })
+    return jsonify({"success": True, "reviews": reviews})
+
+@app.route('/api/reviews/<movie_id>/summary', methods=['GET'])
+def get_review_summary(movie_id):
+    pipeline = [
+        {"$match": {"movie_id": movie_id}},
+        {
+            "$group": {
+                "_id": "$movie_id",
+                "avgRating": {"$avg": "$rating"},
+                "count": {"$sum": 1}
+            }
+        }
+    ]
+    summary = list(mongo.db.reviews.aggregate(pipeline))
+    if summary:
+        data = {
+            "avgRating": round(summary[0]["avgRating"], 1),
+            "count": summary[0]["count"]
+        }
+    else:
+        data = {"avgRating": 0, "count": 0}
+    return jsonify(data)
+
+@app.route('/api/reviews', methods=['POST'])
+@token_required
+def add_review(current_user):
+    data = request.json
+    movie_id = data.get("movie_id")
+    rating = data.get("rating")
+    comment = data.get("comment", "")
+
+    if not movie_id or rating is None:
+        return jsonify({"success": False, "message": "Thiếu movie_id hoặc rating"}), 400
+
+    try:
+        rating = float(rating)
+        if rating < 0 or rating > 5:
+            return jsonify({"success": False, "message": "Rating phải từ 0 đến 5"}), 400
+    except:
+        return jsonify({"success": False, "message": "Rating không hợp lệ"}), 400
+
+    review_doc = {
+        "movie_id": movie_id,
+        "user_id": current_user.get("username"),
+        "username": current_user.get("displayName", current_user.get("username", "Ẩn danh")),
+        "rating": rating,
+        "comment": comment,
+        "created_at": datetime.utcnow()
+    }
+
+    mongo.db.reviews.insert_one(review_doc)
+
+    return jsonify({"success": True, "message": "Đã thêm đánh giá!"})
+
+
+# ---------- ADMIN USERS ----------
+
+@app.route('/api/users', methods=['GET'])
+@token_required
+@admin_required
+def get_users(current_user):
+    users = []
+    for u in mongo.db.users.find({}, {"password": 0}):
+        u["_id"] = str(u["_id"])
+        users.append(u)
+    return jsonify({"success": True, "users": users})
+
+@app.route('/api/users/<username>', methods=['DELETE'])
+@token_required
+@admin_required
+def delete_user(username, current_user):
+    if username == current_user["username"]:
+        return jsonify({"success": False, "message": "Không thể xoá chính bạn!"}), 400
+    result = mongo.db.users.delete_one({"username": username})
+    if result.deleted_count == 1:
+        return jsonify({"success": True, "message": "Đã xoá user!"})
+    else:
+        return jsonify({"success": False, "message": "User không tồn tại!"}), 404
+
+@app.route('/api/users/<username>', methods=['PATCH'])
+@token_required
+@admin_required
+def update_user(username, current_user):
+    data = request.json
+    update_fields = {}
+    for field in ["displayName", "avatar", "gender", "role", "email"]:
+        if field in data:
+            update_fields[field] = data[field]
+    if update_fields:
+        result = mongo.db.users.update_one({"username": username}, {"$set": update_fields})
+        if result.matched_count:
+            return jsonify({"success": True, "message": "Đã cập nhật user!"})
+    return jsonify({"success": False, "message": "User không tồn tại!"}), 404
+
+
+# ---------- CATEGORY ADMIN (CRUD) ----------
+@app.route('/api/categories', methods=['GET'])
+def get_categories():
+    cats = []
+    for c in mongo.db.categories.find():
+        c['_id'] = str(c['_id'])
+        cats.append({'id': c['_id'], 'name': c.get('name')})
+    return jsonify({'success': True, 'categories': cats})
+
+@app.route('/api/categories', methods=['POST'])
+@token_required
+@admin_required
+def add_category(current_user):
+    data = request.json
+    name = data.get('name')
+    if not name:
+        return jsonify({'success': False, 'message': 'Thiếu tên thể loại!'}), 400
+    if mongo.db.categories.find_one({'name': name}):
+        return jsonify({'success': False, 'message': 'Tên thể loại đã tồn tại!'}), 400
+    mongo.db.categories.insert_one({'name': name})
+    return jsonify({'success': True, 'message': 'Đã thêm thể loại!'})
+
+@app.route('/api/categories/<cat_id>', methods=['PUT'])
+@token_required
+@admin_required
+def edit_category(cat_id, current_user):
+    data = request.json
+    name = data.get('name')
+    if not name:
+        return jsonify({'success': False, 'message': 'Thiếu tên thể loại!'}), 400
+    from bson import ObjectId
+    result = mongo.db.categories.update_one({'_id': ObjectId(cat_id)}, {'$set': {'name': name}})
+    if result.matched_count:
+        return jsonify({'success': True, 'message': 'Đã cập nhật!'})
+    return jsonify({'success': False, 'message': 'Không tìm thấy thể loại!'}), 404
+
+@app.route('/api/categories/<cat_id>', methods=['DELETE'])
+@token_required
+@admin_required
+def delete_category(cat_id, current_user):
+    from bson import ObjectId
+    result = mongo.db.categories.delete_one({'_id': ObjectId(cat_id)})
+    if result.deleted_count:
+        return jsonify({'success': True, 'message': 'Đã xoá thể loại!'})
+    return jsonify({'success': False, 'message': 'Không tìm thấy thể loại!'}), 404
 
 # ---------- RUN APP ----------
 if __name__ == '__main__':

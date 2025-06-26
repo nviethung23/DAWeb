@@ -52,21 +52,19 @@ export default function MovieSectionSlider({ title, movies, genresList }) {
     });
   }
 
-  // Khi hover card: delay hiện popup, tính vị trí popup chuẩn với scroll
+  // Khi hover card: delay hiện popup, tính vị trí popup chuẩn với position: fixed
   function handleCardMouseEnter(movie, cardRef) {
     if (showPopupTimerRef.current) clearTimeout(showPopupTimerRef.current);
 
     showPopupTimerRef.current = setTimeout(() => {
       if (cardRef.current) {
         const rect = cardRef.current.getBoundingClientRect();
-        const scrollX = window.scrollX || window.pageXOffset;
-        const scrollY = window.scrollY || window.pageYOffset;
 
-        let targetX = rect.left + scrollX + rect.width / 2 - POPUP_WIDTH / 2;
-        let targetY = rect.top + scrollY + rect.height / 2 - POPUP_HEIGHT / 2;
+        let targetX = rect.left + rect.width / 2 - POPUP_WIDTH / 2;
+        let targetY = rect.top + rect.height / 2 - POPUP_HEIGHT / 2;
 
-        targetX = Math.max(GAP + scrollX, Math.min(targetX, scrollX + window.innerWidth - POPUP_WIDTH - GAP));
-        targetY = Math.max(GAP + scrollY, Math.min(targetY, scrollY + window.innerHeight - POPUP_HEIGHT - GAP));
+        targetX = Math.max(GAP, Math.min(targetX, window.innerWidth - POPUP_WIDTH - GAP));
+        targetY = Math.max(GAP, Math.min(targetY, window.innerHeight - POPUP_HEIGHT - GAP));
 
         setPopupInfo({
           movie,
@@ -145,6 +143,7 @@ export default function MovieSectionSlider({ title, movies, genresList }) {
             genresList={genresList}
             onMouseEnter={handlePopupMouseEnter}
             onMouseLeave={handlePopupMouseLeave}
+            onClose={() => setPopupInfo({ movie: null, pos: null })}
           />
         )}
       </div>

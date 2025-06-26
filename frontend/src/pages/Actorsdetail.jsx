@@ -117,7 +117,7 @@ export default function Actorsdetail() {
   if (moviesByYear["Khác"]) sortedYears.push("Khác");
 
   return (
-    <div className="min-h-screen bg-[#18181c] pt-20 px-6 pb-12 flex flex-col items-center">
+    <div className="min-h-screen bg-[#18181c] pt-40 px-6 pb-12 flex flex-col items-center">
       <div className="w-full max-w-[1200px] flex flex-col md:flex-row gap-8">
         {/* LEFT */}
         <div className="w-full md:w-[310px] flex flex-col items-center bg-[#22232c] rounded-2xl p-8 mb-2 shadow">

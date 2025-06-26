@@ -9,7 +9,16 @@ import user3 from "../assets/userslogo/3.png";
 import user4 from "../assets/userslogo/4.png";
 import user5 from "../assets/userslogo/5.png";
 import user6 from "../assets/userslogo/6.png";
+import debounce from "lodash.debounce";
 const USER_AVATAR_LIST = [user1, user2, user3, user4, user5, user6];
+
+
+const LANGUAGE_OPTIONS = [
+  { code: "vi-VN", label: "Tiếng Việt" },
+  { code: "en-US", label: "English" },
+  
+];
+
 
 function getRandomAvatar(username) {
   let sum = 0;
@@ -25,12 +34,14 @@ export default function Navbar({ onLoginClick }) {
   const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
 
+  const [searchValue, setSearchValue] = useState(""); // <-- Tích hợp state cho search
+  const navigate = useNavigate();
+
   const genreDropdownRef = useRef(null);
   const countryDropdownRef = useRef(null);
   const dropdownRef = useRef(null);
 
   const { user, logout } = useAuth();
-  const navigate = useNavigate();
 
   useEffect(() => {
     getGenres().then(setGenres).catch(() => setGenres([]));
@@ -59,9 +70,18 @@ export default function Navbar({ onLoginClick }) {
     navigate("/");
   }
 
+  // Search: Khi submit form hoặc nhấn Enter sẽ điều hướng sang trang search
+  function handleSearchSubmit(e) {
+    e.preventDefault();
+    if (searchValue.trim()) {
+      navigate(`/search?q=${encodeURIComponent(searchValue.trim())}`);
+      setSearchValue("");
+    }
+  }
+
   // Ưu tiên displayName, nếu không sẽ lấy username/email
-const displayName = user?.displayName?.trim() ? user.displayName : (user?.username || user?.email || "User");
-const avatarKey = user?.username || user?.email || "User";
+  const displayName = user?.displayName?.trim() ? user.displayName : (user?.username || user?.email || "User");
+  const avatarKey = user?.username || user?.email || "User";
 
   return (
     <header className="fixed top-0 left-0 w-full z-50 bg-black/40 backdrop-blur-md border-b border-yellow-500/10 shadow-md">
@@ -92,13 +112,18 @@ const avatarKey = user?.username || user?.email || "User";
         </button>
 
         {/* Search bar */}
-        <div className="w-full lg:flex-1 flex justify-center px-2 mt-3 lg:mt-0">
+        <form
+          className="w-full lg:flex-1 flex justify-center px-2 mt-3 lg:mt-0"
+          onSubmit={handleSearchSubmit}
+        >
           <input
             type="text"
+            value={searchValue}
+            onChange={e => setSearchValue(e.target.value)}
             placeholder="Tìm phim, diễn viên..."
             className="w-full max-w-xl px-5 py-2 rounded-full bg-white/10 text-white placeholder-white/60 focus:outline-none focus:ring focus:ring-yellow-400 text-base transition-all duration-300"
           />
-        </div>
+        </form>
 
         {/* Menu */}
         <div

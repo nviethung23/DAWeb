@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import MovieCardPopup from "../components/MovieCardPopup";
-
+import ReviewList from "../components/ReviewList";
+import ReviewForm from "../components/ReviewForm";
 // Tabs UI
 function Tabs({ currentTab, setTab }) {
   const tabs = [
@@ -229,6 +230,7 @@ export default function MovieDetail() {
   const [showMoreGallery, setShowMoreGallery] = useState(false);
   const [showMoreSuggested, setShowMoreSuggested] = useState(false);
   const [showMoreSimilar, setShowMoreSimilar] = useState(false);
+  const [refreshFlag, setRefreshFlag] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -540,6 +542,14 @@ export default function MovieDetail() {
           </div>
         </div>
       )}
+
+      {/* Review Section dưới trailer */}
+      <div className="max-w-5xl mx-auto mt-10 px-2 text-white">
+        <ReviewList movieId={id} key={refreshFlag ? "r1" : "r0"} />
+        <ReviewForm movieId={id} onReviewSubmitted={() => setRefreshFlag(f => !f)} />
+      </div>
     </div>
+
+    
   );
 }

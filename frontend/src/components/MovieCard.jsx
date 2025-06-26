@@ -1,27 +1,47 @@
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
+import { useWatchLaterMovies } from "../hooks/useWatchLaterMovies";
+import { Clock } from "lucide-react"; // icon xem sau
+import noPoster from "../assets/no_poster.jpg"; // import ảnh mặc định
 
-const TMDB_API_KEY = "beede3bb5fc88310916252b96f99062a96f99062a"; // Bạn dùng key thật nhé!
+const TMDB_API_KEY = "beede3bb5fc88310916252b96f99062a"; 
 
-// Hàm lấy poster ưu tiên poster, nếu không có thì dùng backdrop, fallback ảnh no-image
 function getPoster(movie) {
   if (movie.poster) return movie.poster;
   if (movie.poster_path)
     return `https://image.tmdb.org/t/p/w500${movie.poster_path}`;
   if (movie.backdrop_path)
     return `https://image.tmdb.org/t/p/w500${movie.backdrop_path}`;
-  return "/no-image.png"; // Đảm bảo bạn có file này trong /public
+  return noPoster;  // dùng ảnh mặc định nếu không có
 }
 
 export default function MovieCard({ movie, onHover, onLeave }) {
   const cardRef = useRef();
 
-  // Hàm gọi API lấy ảnh backdrop để show banner khi hover
+  const { isWatchLater, addWatchLater, removeWatchLater } = useWatchLaterMovies();
+  const [loadingWatchLater, setLoadingWatchLater] = useState(false);
+
+  async function toggleWatchLater(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (loadingWatchLater) return;
+
+    setLoadingWatchLater(true);
+    try {
+      if (isWatchLater(movie.id)) {
+        await removeWatchLater(movie.id);
+      } else {
+        await addWatchLater(movie.id);
+      }
+    } finally {
+      setLoadingWatchLater(false);
+    }
+  }
+
   async function handleHover() {
     if (typeof onHover !== "function") return;
 
-    // Nếu đã fetch rồi thì dùng cache
     if (movie._fetchedBackdrops) {
       const banners = movie._fetchedBackdrops;
       if (banners.length > 0) {
@@ -33,7 +53,6 @@ export default function MovieCard({ movie, onHover, onLeave }) {
       }
     }
 
-    // Fetch lần đầu từ API TMDb
     try {
       const res = await axios.get(
         `https://api.themoviedb.org/3/movie/${movie.id}/images?api_key=${TMDB_API_KEY}`
@@ -49,12 +68,10 @@ export default function MovieCard({ movie, onHover, onLeave }) {
         onHover(movie, cardRef);
       }
     } catch (e) {
-      // Nếu lỗi API thì fallback luôn
       onHover(movie, cardRef);
     }
   }
 
-  // Gán event hover nếu callback onHover, onLeave được truyền
   const hoverProps =
     typeof onHover === "function" && typeof onLeave === "function"
       ? {
@@ -63,10 +80,9 @@ export default function MovieCard({ movie, onHover, onLeave }) {
         }
       : {};
 
-  // Xử lý lỗi load ảnh poster
   function handleImgError(e) {
     e.target.onerror = null;
-    e.target.src = "/no-image.png";
+    e.target.src = noPoster;
   }
 
   return (
@@ -85,7 +101,6 @@ export default function MovieCard({ movie, onHover, onLeave }) {
           onError={handleImgError}
           loading="lazy"
         />
-
         {/* Góc trái dưới: TMDB */}
         <div className="absolute left-2 bottom-2 flex items-center">
           <div
@@ -104,11 +119,27 @@ export default function MovieCard({ movie, onHover, onLeave }) {
             </span>
           </div>
         </div>
-
         {/* Góc phải dưới: Năm phát hành */}
         <span className="absolute right-2 bottom-2 bg-black/70 text-white text-xs px-2 py-0.5 rounded font-bold shadow">
           {movie.year || movie.release_date?.slice(0, 4) || ""}
         </span>
+
+        {/* Nút Xem Sau góc trên phải */}
+        <button
+          type="button"
+          onClick={toggleWatchLater}
+          disabled={loadingWatchLater}
+          title={isWatchLater(movie.id) ? "Bỏ xem sau" : "Xem sau"}
+          className={`absolute top-2 right-2 p-1 rounded-full transition
+            ${
+              isWatchLater(movie.id)
+                ? "bg-yellow-400 text-black hover:bg-yellow-500"
+                : "bg-white/30 text-white hover:bg-white/50"
+            }
+          `}
+        >
+          <Clock size={20} />
+        </button>
       </div>
       <div
         className="font-bold text-base mt-2 text-white truncate"

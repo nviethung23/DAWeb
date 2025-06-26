@@ -1,8 +1,9 @@
 import React, { useEffect } from "react";
 import ReactDOM from "react-dom";
-import { PlayCircle, Heart, Info } from "lucide-react";
+import { PlayCircle, Heart, Info, Clock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useFavoriteMovies } from "../hooks/useFavoriteMovies";
+import { useWatchLaterMovies } from "../hooks/useWatchLaterMovies";
 import { useNavigate } from "react-router-dom";
 import toast, { Toaster } from "react-hot-toast";
 
@@ -16,6 +17,11 @@ export default function MovieCardPopup({
 }) {
   const navigate = useNavigate();
   const { isFavorite, addFavorite, removeFavorite } = useFavoriteMovies();
+  const {
+    isWatchLater,
+    addWatchLater,
+    removeWatchLater,
+  } = useWatchLaterMovies();
 
   useEffect(() => {
     function handleScroll() {
@@ -52,6 +58,22 @@ export default function MovieCardPopup({
     }
   }
 
+  async function handleWatchLater() {
+    try {
+      if (isWatchLater(movie.id)) {
+        const ok = await removeWatchLater(movie.id);
+        if (ok) toast("Đã xoá khỏi xem sau!", { icon: "🕒" });
+        else toast.error("Lỗi thao tác! Thử lại sau.");
+      } else {
+        const ok = await addWatchLater(movie.id);
+        if (ok) toast("Đã thêm vào xem sau!", { icon: "🕒" });
+        else toast.error("Bạn cần đăng nhập để thêm vào xem sau!");
+      }
+    } catch {
+      toast.error("Bạn cần đăng nhập để thêm vào xem sau!");
+    }
+  }
+
   const handleGoDetail = () => {
     navigate(`/movie/${movie.id}`);
   };
@@ -70,7 +92,7 @@ export default function MovieCardPopup({
           style={{
             left: pos.x,
             top: pos.y,
-            width: pos.w,
+            width: pos.w ? Math.max(pos.w, 540) : 540,
             background: "rgba(35,37,50,0.97)",
             color: "#fff",
             boxShadow: "0 16px 48px #000b",
@@ -136,15 +158,15 @@ export default function MovieCardPopup({
             <div className="text-xs text-gray-300 mb-2 line-clamp-3">
               {movie.description || movie.overview || "Không có mô tả"}
             </div>
-            <div className="flex gap-2 mt-2 items-center">
+            <div className="flex gap-4 mt-2 items-center">
               <button
-                className="flex items-center gap-2 px-4 py-2 rounded bg-yellow-400 text-black font-bold text-sm min-w-[100px]"
+                className="flex items-center justify-center gap-2  py-2 rounded bg-yellow-400 text-black font-bold text-sm min-w-[110px] h-10"
                 onClick={handleGoDetail}
               >
                 <PlayCircle size={16} /> Xem ngay
               </button>
               <button
-                className={`flex items-center gap-2 px-4 py-2 rounded transition text-white text-sm min-w-[90px] ${
+                className={`flex items-center justify-center gap-2  py-2 rounded transition text-white text-sm min-w-[110px] h-10 ${
                   isFavorite(movie.id)
                     ? "bg-pink-500/90 hover:bg-pink-600"
                     : "bg-white/10 hover:bg-yellow-500/80 hover:text-black"
@@ -161,8 +183,28 @@ export default function MovieCardPopup({
                 />
                 {isFavorite(movie.id) ? "Đã thích" : "Thích"}
               </button>
+
               <button
-                className="flex items-center gap-2 px-4 py-2 rounded bg-white/10 text-white text-sm min-w-[90px]"
+                className={`flex items-center justify-center gap-2  py-2 rounded transition text-white text-sm min-w-[110px] h-10 ${
+                  isWatchLater(movie.id)
+                    ? "bg-yellow-400 text-black hover:bg-yellow-500"
+                    : "bg-white/10 hover:bg-yellow-500/80 hover:text-black"
+                }`}
+                onClick={handleWatchLater}
+              >
+                <Clock
+                  size={16}
+                  fill={isWatchLater(movie.id) ? "currentColor" : "none"}
+                  color={isWatchLater(movie.id) ? "currentColor" : "currentColor"}
+                  className={`transition ${
+                    isWatchLater(movie.id) ? "animate-pulse" : ""
+                  }`}
+                />
+                {isWatchLater(movie.id) ? "Đã xem sau" : "Xem sau"}
+              </button>
+
+              <button
+                className="flex items-center justify-center gap-2  py-2 rounded bg-white/10 text-white text-sm min-w-[110px] h-10"
                 onClick={handleGoDetail}
               >
                 <Info size={16} /> Chi tiết
