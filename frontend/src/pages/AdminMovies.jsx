@@ -83,16 +83,26 @@ export default function AdminMovies() {
     // eslint-disable-next-line
   }, []);
 
-  async function fetchMovies() {
+    async function fetchMovies() {
+    setLoading(true);
     try {
-      setLoading(true);
-      const res = await axios.get(`${API_BASE}/movies`);
-      setMovies(res.data.movies || []);
-    } catch {
-      alert("Lỗi tải phim");
-    } finally {
-      setLoading(false);
+      const res = await axios.get(`${API_BASE}/movies`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      // In ra kiểm tra format trả về
+      console.log("DATA PHIM:", res.data);
+
+      // Xử lý chuẩn mọi trường hợp trả về:
+      let data = res.data;
+      if (data.movies && Array.isArray(data.movies)) setMovies(data.movies);
+      else if (data.data && Array.isArray(data.data)) setMovies(data.data);
+      else if (Array.isArray(data)) setMovies(data);
+      else setMovies([]);
+    } catch (err) {
+      toast.error("Không lấy được danh sách phim!");
+      setMovies([]);
     }
+    setLoading(false);
   }
 
   function openAddForm() {

@@ -242,10 +242,8 @@ def add_movie(current_user):
                 file.save(g_save_path)
                 gallery_paths.append(f"/uploads/posters/{g_filename}")
 
-    movies = load_movies()
-    new_id = max([m['id'] for m in movies], default=100000) + 1
+    # **CHUYỂN SANG MongoDB**
     movie = {
-        "id": new_id,
         "title": title,
         "description": description,
         "year": int(year),
@@ -260,74 +258,83 @@ def add_movie(current_user):
         "created_by": current_user['username'],
         "created_at": datetime.datetime.utcnow().isoformat()
     }
-    movies.append(movie)
-    save_movies(movies)
+    result = mongo.db.movies.insert_one(movie)
+    movie["_id"] = str(result.inserted_id)
     return jsonify({"success": True, "movie": movie, "message": "Thêm phim thành công!"}), 201
 
-@app.route('/api/movies/<int:movie_id>', methods=['PUT'])
+@app.route('/api/movies/<movie_id>', methods=['PUT'])
 @token_required
 @admin_required
 def edit_movie(movie_id, current_user):
     data = request.form
-    movies = load_movies()
-    for m in movies:
-        if m['id'] == movie_id:
-            # Chỉ cho phép sửa bởi admin
-            for k in ["title", "description", "year", "country", "genre", "actors", "type"]:
-                if k in data:
-                    m[k] = data[k]
+    update_fields = {}
 
-            # Cập nhật file nếu có upload mới
-            if 'poster' in request.files:
-                poster = request.files['poster']
-                if poster and allowed_image(poster.filename):
-                    filename = secure_filename(poster.filename)
-                    save_path = os.path.join(app.config['UPLOAD_FOLDER_POSTER'], filename)
-                    poster.save(save_path)
-                    m['poster'] = f"/uploads/posters/{filename}"
-            if 'trailer_file' in request.files:
-                trailer_file = request.files['trailer_file']
-                if trailer_file and allowed_video(trailer_file.filename):
-                    t_filename = secure_filename(trailer_file.filename)
-                    t_save_path = os.path.join(app.config['UPLOAD_FOLDER_TRAILER'], t_filename)
-                    trailer_file.save(t_save_path)
-                    m['trailer'] = f"/uploads/trailers/{t_filename}"
-            if 'video' in request.files:
-                video = request.files['video']
-                if video and allowed_video(video.filename):
-                    v_filename = secure_filename(video.filename)
-                    v_save_path = os.path.join(app.config['UPLOAD_FOLDER_VIDEO'], v_filename)
-                    video.save(v_save_path)
-                    m['video'] = f"/uploads/videos/{v_filename}"
+    for k in ["title", "description", "year", "country", "genre", "actors", "type"]:
+        if k in data:
+            # Đảm bảo đúng kiểu dữ liệu nếu là year hoặc actors
+            if k == "year":
+                update_fields[k] = int(data[k])
+            elif k == "actors":
+                update_fields[k] = [a.strip() for a in data[k].split(",")]
+            else:
+                update_fields[k] = data[k]
 
-            save_movies(movies)
-            return jsonify({"success": True, "movie": m, "message": "Sửa phim thành công!"}), 200
+    # Cập nhật file nếu có upload mới
+    if 'poster' in request.files:
+        poster = request.files['poster']
+        if poster and allowed_image(poster.filename):
+            filename = secure_filename(poster.filename)
+            save_path = os.path.join(app.config['UPLOAD_FOLDER_POSTER'], filename)
+            poster.save(save_path)
+            update_fields['poster'] = f"/uploads/posters/{filename}"
+    if 'trailer_file' in request.files:
+        trailer_file = request.files['trailer_file']
+        if trailer_file and allowed_video(trailer_file.filename):
+            t_filename = secure_filename(trailer_file.filename)
+            t_save_path = os.path.join(app.config['UPLOAD_FOLDER_TRAILER'], t_filename)
+            trailer_file.save(t_save_path)
+            update_fields['trailer'] = f"/uploads/trailers/{t_filename}"
+    if 'video' in request.files:
+        video = request.files['video']
+        if video and allowed_video(video.filename):
+            v_filename = secure_filename(video.filename)
+            v_save_path = os.path.join(app.config['UPLOAD_FOLDER_VIDEO'], v_filename)
+            video.save(v_save_path)
+            update_fields['video'] = f"/uploads/videos/{v_filename}"
+
+    result = mongo.db.movies.update_one(
+        {"_id": ObjectId(movie_id)},
+        {"$set": update_fields}
+    )
+    if result.matched_count:
+        return jsonify({"success": True, "message": "Sửa phim thành công!"}), 200
     return jsonify({"success": False, "message": "Không tìm thấy phim!"}), 404
 
-@app.route('/api/movies/<int:movie_id>', methods=['DELETE'])
+@app.route('/api/movies/<movie_id>', methods=['DELETE'])
 @token_required
 @admin_required
 def delete_movie(movie_id, current_user):
-    movies = load_movies()
-    for m in movies:
-        if m['id'] == movie_id:
-            movies.remove(m)
-            save_movies(movies)
-            return jsonify({"success": True, "message": "Xóa phim thành công!"}), 200
+    result = mongo.db.movies.delete_one({"_id": ObjectId(movie_id)})
+    if result.deleted_count:
+        return jsonify({"success": True, "message": "Xóa phim thành công!"}), 200
     return jsonify({"success": False, "message": "Không tìm thấy phim!"}), 404
+
 
 # ----------- Movie View (ai cũng xem được) -----------
 @app.route('/api/movies', methods=['GET'])
 def get_movies():
-    movies = load_movies()
-    return jsonify({"success": True, "movies": movies}), 200
+    db_movies = list(mongo.db.movies.find())
+    for m in db_movies:
+        m["_id"] = str(m["_id"])
+    file_movies = load_movies()
+    return jsonify({"success": True, "movies": db_movies + file_movies}), 200
 
-@app.route('/api/movies/<int:movie_id>', methods=['GET'])
+@app.route('/api/movies/<movie_id>', methods=['GET'])
 def get_movie_detail(movie_id):
-    movies = load_movies()
-    for m in movies:
-        if m['id'] == movie_id:
-            return jsonify({"success": True, "movie": m}), 200
+    movie = mongo.db.movies.find_one({"_id": ObjectId(movie_id)})
+    if movie:
+        movie["_id"] = str(movie["_id"])
+        return jsonify({"success": True, "movie": movie}), 200
     return jsonify({"success": False, "message": "Không tìm thấy phim!"}), 404
 
 # ----------- API yêu thích, xem sau cho user thường -----------
@@ -501,6 +508,36 @@ def tmdb_discover():
     if status == 200 and "total_pages" in data:
         data["total_pages"] = min(data["total_pages"], TOTAL_PAGES)
     return jsonify(data), status
+
+
+@app.route('/api/movies/search')
+def search_movies():
+    keyword = request.args.get('keyword', '').strip()
+    if not keyword:
+        return jsonify([])
+
+    # Tìm kiếm theo title hoặc name (nếu bạn lưu khác tên)
+    movies = list(mongo.db.movies.find({
+        "$or": [
+            {'title': {'$regex': keyword, '$options': 'i'}},
+            {'name': {'$regex': keyword, '$options': 'i'}}
+        ]
+    }).limit(15))
+
+    # Chuyển ObjectId sang string và chỉ trả về trường cần thiết
+    results = []
+    for movie in movies:
+        results.append({
+            "_id": str(movie.get('_id')),
+            "title": movie.get('title', ''),
+            "name": movie.get('name', ''),
+            "poster": movie.get('poster', ''),  # đường dẫn ảnh/poster
+            "year": movie.get('year', ''),
+            "description": movie.get('description', ''),
+            # Thêm trường khác nếu cần...
+        })
+
+    return jsonify(results)
 
 @app.route("/api/tmdb/search", methods=["GET"])
 def tmdb_search():
@@ -748,6 +785,19 @@ def update_user(username, current_user):
             return jsonify({"success": True, "message": "Đã cập nhật user!"})
     return jsonify({"success": False, "message": "User không tồn tại!"}), 404
 
+@app.route('/api/users/<username>/role', methods=['PATCH'])
+@token_required
+@admin_required
+def update_user_role(username, current_user):
+    data = request.json
+    new_role = data.get('role')
+    if new_role not in ['admin', 'user']:
+        return jsonify({'error': 'Role không hợp lệ'}), 400
+    result = mongo.db.users.update_one({'username': username}, {'$set': {'role': new_role}})
+    if result.matched_count == 0:
+        return jsonify({'error': 'Không tìm thấy user'}), 404
+    return jsonify({'message': f'Đã cập nhật quyền user {username} thành {new_role}'}), 200
+
 
 # ---------- CATEGORY ADMIN (CRUD) ----------
 @app.route('/api/categories', methods=['GET'])
@@ -795,10 +845,6 @@ def delete_category(cat_id, current_user):
         return jsonify({'success': True, 'message': 'Đã xoá thể loại!'})
     return jsonify({'success': False, 'message': 'Không tìm thấy thể loại!'}), 404
 
-SMTP_HOST = "smtp.gmail.com"
-SMTP_PORT = 587
-SMTP_USER = os.environ.get("SMTP_USER")  # đặt trong biến môi trường
-SMTP_PASS = os.environ.get("SMTP_PASS")
 
 def generate_otp(length=6):
     return ''.join(random.choices(string.digits, k=length))

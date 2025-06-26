@@ -33,7 +33,9 @@ export default function SearchPage() {
   const [popupInfo, setPopupInfo] = useState({ movie: null, pos: null, cardRef: null });
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+
   const leaveTimer = useRef(null);
+  const popupDelayTimer = useRef(null);
   const cardRefs = useRef({});
 
   function getCardRef(id) {
@@ -62,25 +64,79 @@ export default function SearchPage() {
       return;
     }
     setLoading(true);
-    axios
-      .get(`https://api.themoviedb.org/3/search/${type}`, {
-        params: {
-          api_key: TMDB_API_KEY,
-          language: lang,
-          query: keyword,
-          include_adult: false,
-          page,
-        },
-      })
-      .then((res) => {
-        setTotalPages(res.data.total_pages || 1);
-        setResults(res.data.results || []);
-      })
-      .catch(() => {
-        setResults([]);
-        setTotalPages(1);
-      })
-      .finally(() => setLoading(false));
+
+    // Nếu type là movie => tìm cả phim backend và phim TMDB
+    if (type === "movie") {
+      // Gọi song song cả 2 API (backend & TMDB)
+      Promise.all([
+        axios.get(`/api/movies`, {
+        params: { q: keyword, page },
+        }),
+        axios.get(`https://api.themoviedb.org/3/search/movie`, {
+          params: {
+            api_key: TMDB_API_KEY,
+            language: lang,
+            query: keyword,
+            include_adult: false,
+            page,
+          },
+        }),
+      ])
+        .then(([resBackend, resTmdb]) => {
+          // Ghép dữ liệu backend (phim tự thêm) và TMDB (phim quốc tế)
+          let backendMovies = (resBackend.data.movies || []).map((m) => ({
+            ...m,
+            name: m.title || m.name,
+            id: m._id || m.id, // lấy id cho chắc
+            source: "local",
+            poster:
+              m.poster && (m.poster.startsWith("http") || m.poster.startsWith("/uploads"))
+                ? m.poster
+                : "",
+            year: m.year || (m.release_date || "").split("-")[0],
+          }));
+          let tmdbMovies = (resTmdb.data.results || []).map((m) => ({
+            ...m,
+            name: m.title || m.name,
+            id: m.id,
+            source: "tmdb",
+            poster: m.poster_path
+              ? "https://image.tmdb.org/t/p/w500" + m.poster_path
+              : "",
+            year: (m.release_date || "").split("-")[0],
+          }));
+          // Chỉ lấy tối đa 15 phim đầu
+          const all = [...backendMovies, ...tmdbMovies].slice(0, 15);
+          setResults(all);
+          setTotalPages(Math.max(resBackend.data.total_pages || 1, resTmdb.data.total_pages || 1));
+        })
+        .catch(() => {
+          setResults([]);
+          setTotalPages(1);
+        })
+        .finally(() => setLoading(false));
+    } else {
+      // Nếu tìm diễn viên
+      axios
+        .get(`https://api.themoviedb.org/3/search/person`, {
+          params: {
+            api_key: TMDB_API_KEY,
+            language: lang,
+            query: keyword,
+            include_adult: false,
+            page,
+          },
+        })
+        .then((res) => {
+          setResults((res.data.results || []).slice(0, 15));
+          setTotalPages(res.data.total_pages || 1);
+        })
+        .catch(() => {
+          setResults([]);
+          setTotalPages(1);
+        })
+        .finally(() => setLoading(false));
+    }
   }, [type, lang, keyword, page]);
 
   function updatePopupPos(cardRef) {
@@ -93,24 +149,38 @@ export default function SearchPage() {
     return { x, y, w: POPUP_WIDTH, h: POPUP_HEIGHT };
   }
 
+  // === Popup Hover delay ===
   function handleCardHover(movie, cardRef) {
     if (leaveTimer.current) clearTimeout(leaveTimer.current);
-    const pos = updatePopupPos(cardRef);
-    if (pos) setPopupInfo({ movie, pos, cardRef });
+    if (popupDelayTimer.current) clearTimeout(popupDelayTimer.current);
+    // Delay 350ms mới hiện popup
+    popupDelayTimer.current = setTimeout(() => {
+      const pos = updatePopupPos(cardRef);
+      if (pos) setPopupInfo({ movie, pos, cardRef });
+    }, 350); // chỉnh ms theo ý bạn (300-500ms tuỳ cảm giác)
   }
+
   function handleLeave() {
     if (leaveTimer.current) clearTimeout(leaveTimer.current);
+    if (popupDelayTimer.current) clearTimeout(popupDelayTimer.current);
     leaveTimer.current = setTimeout(() => {
       setPopupInfo({ movie: null, pos: null, cardRef: null });
     }, 160);
   }
+
   function handlePopupEnter() {
     if (leaveTimer.current) clearTimeout(leaveTimer.current);
   }
 
   useEffect(() => {
-    if (!popupInfo.movie || !popupInfo.cardRef) return;
+    return () => {
+      if (popupDelayTimer.current) clearTimeout(popupDelayTimer.current);
+      if (leaveTimer.current) clearTimeout(leaveTimer.current);
+    };
+  }, []);
 
+  useEffect(() => {
+    if (!popupInfo.movie || !popupInfo.cardRef) return;
     function handleScrollResize() {
       const pos = updatePopupPos(popupInfo.cardRef);
       if (pos) {
@@ -119,7 +189,6 @@ export default function SearchPage() {
     }
     window.addEventListener("scroll", handleScrollResize, { passive: true });
     window.addEventListener("resize", handleScrollResize);
-
     return () => {
       window.removeEventListener("scroll", handleScrollResize);
       window.removeEventListener("resize", handleScrollResize);
@@ -127,7 +196,7 @@ export default function SearchPage() {
   }, [popupInfo.movie, popupInfo.cardRef]);
 
   function handleActorClick(id) {
-    navigate(`/actor/${id}`);
+    navigate(`/actors/${id}`);
   }
 
   function handlePrevPage() {
@@ -198,18 +267,11 @@ export default function SearchPage() {
         ) : type === "movie" ? (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-7 pt-4">
-              {results.slice(0, 15).map((movie) => (
+              {results.map((movie) => (
                 <MovieCard
                   key={movie.id}
                   ref={getCardRef(movie.id)}
-                  movie={{
-                    ...movie,
-                    name: movie.title || movie.name,
-                    poster: movie.poster_path
-                      ? "https://image.tmdb.org/t/p/w500" + movie.poster_path
-                      : "",
-                    year: (movie.release_date || "").split("-")[0],
-                  }}
+                  movie={movie}
                   onHover={handleCardHover}
                   onLeave={handleLeave}
                 />
@@ -226,7 +288,7 @@ export default function SearchPage() {
           </>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-7 pt-4">
-            {results.slice(0, 15).map((actor, i) => (
+            {results.map((actor, i) => (
               <div
                 key={actor.id || i}
                 className="group relative rounded-2xl overflow-hidden shadow-[0_4px_24px_0_rgba(0,0,0,0.18)] bg-[#22232c] transition cursor-pointer"
