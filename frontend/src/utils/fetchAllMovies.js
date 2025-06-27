@@ -1,7 +1,7 @@
 // src/utils/fetchAllMovies.js
 import axios from "axios";
 
-const TOTAL_PAGES = 20; // hoặc 500 nếu cần
+const TOTAL_PAGES = 5; // hoặc 500 nếu cần
 
 export async function fetchAllMovies() {
   const requests = [];

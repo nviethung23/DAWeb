@@ -50,7 +50,7 @@ function loadActorOptions(inputValue, callback) {
     .then((res) => {
       const options = (res.data.results || []).map((actor) => ({
         label: actor.name,
-        value: actor.id,
+        value: actor._id,
       }));
       callback(options);
     })
@@ -155,13 +155,17 @@ export default function AdminMovies() {
   }
 
   function actorOptionsFromString(actorsStr = "", currentOptions = []) {
-    if (!actorsStr) return [];
-    const names = actorsStr.split(",").map((s) => s.trim());
-    return names.map((name) => {
-      const found = currentOptions.find((a) => a.label === name);
-      return found || { label: name, value: name };
-    });
+
+  if (Array.isArray(actorsStr)) {
+    actorsStr = actorsStr.join(", ");
   }
+  if (!actorsStr || typeof actorsStr !== "string") return [];
+  const names = actorsStr.split(",").map((s) => s.trim());
+  return names.map((name) => {
+    const found = currentOptions.find((a) => a.label === name);
+    return found || { label: name, value: name };
+  });
+}
 
   function handleChange(e) {
     const { name, value, files } = e.target;
@@ -209,7 +213,7 @@ export default function AdminMovies() {
       setLoading(true);
       let res;
       if (editMovie) {
-        res = await axios.put(`${API_BASE}/movies/${editMovie.id}`, form, {
+        res = await axios.put(`${API_BASE}/movies/${editMovie._id}`, form, {
           headers: { Authorization: `Bearer ${token}` },
         });
       } else {
@@ -296,7 +300,7 @@ export default function AdminMovies() {
             </thead>
             <tbody>
               {movies.map((m) => (
-                <tr key={m.id} className="border-b border-[#232332] hover:bg-[#22222a]/80 transition group">
+                <tr key={m._id} className="border-b border-[#232332] hover:bg-[#22222a]/80 transition group">
                   <td className="p-2 border border-[#232332]">
                     <img
                       src={getPosterUrl(m)}
@@ -305,7 +309,7 @@ export default function AdminMovies() {
                       loading="lazy"
                     />
                   </td>
-                  <td className="p-2 border border-[#232332]">{m.id}</td>
+                  <td className="p-2 border border-[#232332]">{m._id}</td>
                   <td className="p-2 border border-[#232332] font-bold">{m.title}</td>
                   <td className="p-2 border border-[#232332]">{m.year}</td>
                   <td className="p-2 border border-[#232332]">
@@ -331,7 +335,7 @@ export default function AdminMovies() {
                       Sửa
                     </button>
                     <button
-                      onClick={() => handleDelete(m.id)}
+                      onClick={() => handleDelete(m._id)}
                       className="bg-red-500 hover:bg-red-700 text-white font-bold px-4 py-1 rounded-xl shadow"
                     >
                       Xóa

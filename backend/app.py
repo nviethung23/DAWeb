@@ -8,7 +8,8 @@ import requests
 import os
 import json
 from functools import wraps
-import datetime
+
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from bson import ObjectId
 import smtplib
@@ -90,7 +91,7 @@ def register():
         "password": hashed_pw,
         "email": data['email'],
         "role": "user",  # Mặc định user thường
-        "created_at": datetime.datetime.utcnow(),
+        "created_at": datetime.utcnow(),
         "displayName": data.get('displayName', ""),   # Thêm field displayName mặc định rỗng
         "avatar": data.get('avatar', ""),              # Thêm avatar mặc định rỗng
         "gender": data.get('gender', "other")
@@ -107,7 +108,7 @@ def login():
 
     token = jwt.encode({
         "username": user['username'],
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=1)
+        "exp": datetime.utcnow() + timedelta(days=1)
     }, app.config['SECRET_KEY'], algorithm="HS256")
 
     return jsonify({
@@ -256,7 +257,7 @@ def add_movie(current_user):
         "gallery": gallery_paths,
         "type": movie_type,
         "created_by": current_user['username'],
-        "created_at": datetime.datetime.utcnow().isoformat()
+        "created_at": datetime.utcnow().isoformat()
     }
     result = mongo.db.movies.insert_one(movie)
     movie["_id"] = str(result.inserted_id)
@@ -861,7 +862,7 @@ def request_otp():
         return jsonify({'error': 'Email không tồn tại'}), 400
 
     otp_code = generate_otp()
-    expired_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
+    expired_at = datetime.utcnow() + timedelta(minutes=5)
 
     # Lưu vào collection otp, nếu đã có thì cập nhật
     mongo.db.password_otps.update_one(
@@ -889,7 +890,7 @@ def verify_otp_reset():
     otp_record = mongo.db.password_otps.find_one({'email': email})
     if (not otp_record
         or otp_record['otp'] != otp
-        or otp_record['expired_at'] < datetime.datetime.utcnow()):
+        or otp_record['expired_at'] < datetime.utcnow()):
         return jsonify({'error': 'Mã OTP không hợp lệ hoặc đã hết hạn'}), 400
 
     user = mongo.db.users.find_one({'email': email})

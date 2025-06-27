@@ -100,7 +100,7 @@ export default function AdminDashboard() {
       {/* Các nút truy cập nhanh */}
       <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-5">
         <button
-          onClick={() => navigate("/admin/users")}
+          onClick={() => navigate("/admin/user")}
           className="w-full bg-yellow-400 hover:bg-yellow-500 text-black font-bold rounded-xl px-7 py-4 shadow-xl text-lg transition"
         >
           Quản lý Users
@@ -112,7 +112,7 @@ export default function AdminDashboard() {
           Quản lý Phim
         </button>
         <button
-          onClick={() => navigate("/admin/categories")}
+          onClick={() => navigate("/admin/category")}
           className="w-full bg-yellow-400 hover:bg-yellow-500 text-black font-bold rounded-xl px-7 py-4 shadow-xl text-lg transition"
         >
           Quản lý Thể loại

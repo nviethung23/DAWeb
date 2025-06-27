@@ -56,7 +56,7 @@ export default function RegisterModal({ show, onClose, onShowLogin }) {
       });
       setLoading(false);
       onClose();
-      navigate("/login");
+      if (onShowLogin) onShowLogin();
     } catch (err) {
       toast.error(
         err.response?.data?.error ||
